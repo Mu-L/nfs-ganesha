@@ -1992,9 +1992,13 @@ void place_new_dirent(mdcache_entry_t *parent_dir,
 
 	if (code < 0) {
 		/* We failed to insert into FSAL cookie AVL tree, will fail.
-		 * Nothing to clean up since we haven't done anything
+		 * Need to mark chunk NULL to make sure an orphan pointer is
+		 * never dereferenced.
+		 *
+		 * Nothing else to clean up since we haven't done anything
 		 * unreversible, and we no longer trust the chunks.
 		 */
+		new_dir_entry->chunk = NULL; /* found by Opus 4.6 */
 		goto out;
 	}
 
