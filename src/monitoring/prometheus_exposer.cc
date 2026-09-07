@@ -35,6 +35,8 @@
 #include <streambuf>
 #include <mutex>
 
+#include <urcu-bp.h>
+
 extern "C" {
 #include "fsal.h"
 #include "gsh_config.h"
