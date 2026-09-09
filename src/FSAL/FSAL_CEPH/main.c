@@ -1143,6 +1143,8 @@ static fsal_status_t create_export(struct fsal_module *module_in,
 	bool stxr = false;
 	char *message, *additional = NULL;
 	char str_val[1024];
+	/* place-holder for userid & key - ceph client pool */
+	char *user_id, *key;
 
 	fsal_export_init(&export->export);
 	export_ops_init(&export->export.exp_ops);
@@ -1161,9 +1163,32 @@ static fsal_status_t create_export(struct fsal_module *module_in,
 	}
 
 	memset(&cm_key, 0, sizeof(cm_key));
+	user_id = key = NULL;
+
+	/* check if ceph client pool is enabled and we have userid and key */
+	if (CephFSM.clnts_per_pool > 1) {
+		int idx;
+
+		idx = export->export.export_id % CephFSM.clnts_per_pool;
+		ceph_client_pool_lookup(export->fs_name, idx, &user_id, &key);
+		LogDebug(COMPONENT_FSAL,
+			 "Fetching user info for FS %s, with index %d",
+			 export->fs_name, idx);
+		LogDebug(COMPONENT_FSAL, "Got User: %s, Key: %s", user_id, key);
+	}
+
+	if (!user_id || !key) {
+		/* we have no userid or key from ceph client pool */
+		user_id = export->user_id;
+		key = export->secret_key;
+		LogDebug(
+			COMPONENT_FSAL,
+			"Falling back to user_id and secret key provided in export block");
+	}
+
 	cm_key.cm_fs_name = export->fs_name;
-	cm_key.cm_user_id = export->user_id;
-	cm_key.cm_secret_key = export->secret_key;
+	cm_key.cm_user_id = user_id;
+	cm_key.cm_secret_key = key;
 
 	/* If cmount_path is configured, use that, otherwise use
 	 * CTX_FULLPATH(op_ctx). This allows an export where cmount_path
@@ -1220,12 +1245,11 @@ static fsal_status_t create_export(struct fsal_module *module_in,
 		cm->cm_mount_path =
 			gsh_strdup(CTX_FULLPATH(op_ctx), MEM_COMP_FSAL);
 
-	if (export->user_id)
-		cm->cm_user_id = gsh_strdup(export->user_id, MEM_COMP_FSAL);
+	if (user_id)
+		cm->cm_user_id = gsh_strdup(user_id, MEM_COMP_FSAL);
 
-	if (export->secret_key)
-		cm->cm_secret_key =
-			gsh_strdup(export->secret_key, MEM_COMP_FSAL);
+	if (key)
+		cm->cm_secret_key = gsh_strdup(key, MEM_COMP_FSAL);
 
 	LogDebug(COMPONENT_FSAL, "New cmount %s for %s", cm->cm_mount_path,
 		 CTX_FULLPATH(op_ctx));
